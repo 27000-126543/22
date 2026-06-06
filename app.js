@@ -479,6 +479,7 @@ function createInitialWagons() {
 function createWagon(x, z, area, idx, trackNo) {
     const group = new THREE.Group();
     const wagonType = WAGON_TYPES[Math.floor(Math.random() * WAGON_TYPES.length)];
+    const wagonNo = wagonType + '-' + (10000 + idx);
     const weight = 30 + Math.floor(Math.random() * 60);
     const dest = STATIONS[Math.floor(Math.random() * STATIONS.length)];
     let status;
@@ -530,7 +531,7 @@ function createWagon(x, z, area, idx, trackNo) {
     ctx.font = 'bold 36px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(wagonType + '-' + (10000 + idx), 128, 32);
+    ctx.fillText(wagonNo, 128, 32);
     const labelTex = new THREE.CanvasTexture(canvas);
     const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex, transparent: true }));
     label.position.set(0, 5, 1.5);
@@ -550,6 +551,7 @@ function createWagon(x, z, area, idx, trackNo) {
 
     const wagonData = {
         id: 'W' + (10000 + idx),
+        wagonNo: wagonNo,
         type: wagonType,
         weight: weight,
         destination: dest,
@@ -558,8 +560,11 @@ function createWagon(x, z, area, idx, trackNo) {
         trackNo: trackNo,
         speed: 0,
         couplingSpeed: 0,
-        maintenance: generateMaintenanceRecords(),
-        plan: generateTransportPlan(dest),
+        axles: Math.random() < 0.3 ? 4 : 6,
+        brakeType: ['空气制动', '电空制动', '盘形制动'][Math.floor(Math.random() * 3)],
+        lastCheck: new Date(Date.now() - Math.random() * 30 * 86400000).toLocaleDateString('zh-CN'),
+        maintenanceRecords: generateMaintenanceRecords(),
+        transportPlan: generateTransportPlan(dest),
         mesh: group,
         color: color,
         originalTrack: trackNo,
@@ -593,15 +598,19 @@ function generateMaintenanceRecords() {
         const item = items[i % items.length];
         const isPass = Math.random() > 0.12;
         const detail = standards[item] ? standards[item][Math.floor(Math.random() * standards[item].length)] : '各项指标符合标准';
+        const recId = 100000 + Math.floor(Math.random() * 899999);
+        const inspectorName = people[Math.floor(Math.random() * people.length)];
         records.push({
-            id: 'MR-' + (100000 + Math.floor(Math.random() * 899999)),
+            id: recId,
+            recordNo: 'JX' + recId,
             date: d.toISOString().slice(0, 10),
             time: (8 + Math.floor(Math.random() * 10)) + ':' + String(Math.floor(Math.random() * 60)).padStart(2, '0'),
             item: item,
-            result: isPass ? '合格' : '不合格',
-            inspector: people[Math.floor(Math.random() * people.length)],
-            detail: isPass ? detail : (item + '存在异常，需要检修'),
-            remark: isPass ? '' : (Math.random() > 0.5 ? '已上报扣修' : '现场修复后合格')
+            result: isPass ? '合格' : (Math.random() > 0.5 ? '不合格' : '待复'),
+            inspector: inspectorName,
+            team: ['列检一班', '列检二班', '列检三班'][Math.floor(Math.random() * 3)],
+            details: isPass ? `${item}检测结果：${detail}。各项技术指标符合运用标准，允许继续运行。` : `${item}检测发现异常：${detail}。测量值超出允许范围${(Math.random()*25+5).toFixed(1)}%，建议扣修或进一步检查。`,
+            remark: isPass ? '' : (Math.random() > 0.5 ? '已上报扣修，等待调度安排' : '现场临时修复，需重点跟踪')
         });
     }
     return records;
@@ -612,66 +621,19 @@ function generateTransportPlan(dest) {
     const today = new Date();
     const trains = ['41001', '41005', '41008', '41012', '41018', '42005'];
     const train = trains[Math.floor(Math.random() * trains.length)];
-
-    plans.push({
-        id: 'TP-' + Date.now() + '-1',
-        date: today.toISOString().slice(0, 10),
-        time: '04:30',
-        task: '到达',
-        from: '郑州北',
-        to: '-',
-        train: train,
-        wagonCount: 48,
-        status: '已完成',
-        operator: '王调度'
-    });
-    plans.push({
-        id: 'TP-' + Date.now() + '-2',
-        date: today.toISOString().slice(0, 10),
-        time: '06:15',
-        task: '技术检查',
-        from: '-',
-        to: '-',
-        train: train,
-        wagonCount: 48,
-        status: '已完成',
-        operator: '李列检'
-    });
-    plans.push({
-        id: 'TP-' + Date.now() + '-3',
-        date: today.toISOString().slice(0, 10),
-        time: '08:00',
-        task: '驼峰解体',
-        from: '-',
-        to: '-',
-        train: train,
-        wagonCount: 48,
-        status: '进行中',
-        operator: '张调车长'
-    });
-    plans.push({
-        id: 'TP-' + Date.now() + '-4',
-        date: new Date(today.getTime() + 86400000).toISOString().slice(0, 10),
-        time: '14:00',
-        task: '编组',
-        from: '-',
-        to: dest,
-        train: '52' + train.slice(2),
-        wagonCount: 52,
-        status: '待执行',
-        operator: '-'
-    });
-    plans.push({
-        id: 'TP-' + Date.now() + '-5',
-        date: new Date(today.getTime() + 86400000 * 2).toISOString().slice(0, 10),
-        time: '02:30',
-        task: '出发',
-        from: '本站',
-        to: dest,
-        train: '52' + train.slice(2),
-        wagonCount: 52,
-        status: '待执行',
-        operator: '-'
+    const steps = [
+        { step: '1. 到达', time: '04:30', trainNo: train, detail: '列车从郑州北到达，接入到达场3道，共48辆', operator: '王调度', status: '已完成' },
+        { step: '2. 技术检查', time: '06:15', trainNo: '-', detail: '列检一班完成技术检查，发现2辆需扣修，其余合格', operator: '李列检', status: '已完成' },
+        { step: '3. 驼峰解体', time: '08:00', trainNo: train, detail: '驼峰解体作业，按去向分解至调车场各股道', operator: '张调车长', status: '进行中' },
+        { step: '4. 编组作业', time: '14:00', trainNo: '52' + train.slice(2), detail: `按编组计划重新编组，发往${dest}，共52辆`, operator: '-', status: '待执行' },
+        { step: '5. 出发', time: '次日02:30', trainNo: '52' + train.slice(2), detail: `列车从出发场发车，开往${dest}方向`, operator: '-', status: '待执行' }
+    ];
+    steps.forEach(s => {
+        plans.push({
+            id: 'TP-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            date: today.toISOString().slice(0, 10),
+            ...s
+        });
     });
     return plans;
 }
@@ -829,3 +791,958 @@ function createInspector(d, idx) {
     clickableObjects.push(group);
     scene.add(group);
 }
+
+// ========== 鼠标事件处理 ==========
+function onMouseDown(e) {
+    controls.isDragging = true;
+    controls.prev.x = e.clientX;
+    controls.prev.y = e.clientY;
+}
+
+function onMouseUp() {
+    controls.isDragging = false;
+}
+
+function onMouseMove(e) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    if (controls.isDragging) {
+        const dx = e.clientX - controls.prev.x;
+        const dy = e.clientY - controls.prev.y;
+        controls.rot.y += dx * 0.005;
+        controls.rot.x += dy * 0.005;
+        controls.rot.x = Math.max(0.1, Math.min(1.4, controls.rot.x));
+        controls.prev.x = e.clientX;
+        controls.prev.y = e.clientY;
+    }
+
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(clickableObjects, true);
+    const tooltip = document.getElementById('tooltip');
+    if (hits.length > 0) {
+        let obj = hits[0].object;
+        while (obj.parent && !obj.userData.type) obj = obj.parent;
+        if (obj.userData.type) {
+            const ud = obj.userData;
+            let html = '';
+            if (ud.type === 'wagon') {
+                const d = ud.data;
+                html = `<div class="tt-title">🚃 ${d.wagonNo}</div>
+                    <div class="tt-row"><span class="k">车型</span><span>${d.type}</span></div>
+                    <div class="tt-row"><span class="k">载重</span><span>${d.weight}t</span></div>
+                    <div class="tt-row"><span class="k">到站</span><span>${d.destination}</span></div>
+                    <div class="tt-row"><span class="k">状态</span><span>${d.status}</span></div>`;
+            } else if (ud.type === 'locomotive') {
+                const d = ud.data;
+                html = `<div class="tt-title">🚂 ${d.name}</div>
+                    <div class="tt-row"><span class="k">位置</span><span>${d.location}</span></div>
+                    <div class="tt-row"><span class="k">油量</span><span>${d.fuel}%</span></div>
+                    <div class="tt-row"><span class="k">状态</span><span>${d.status}</span></div>`;
+            } else if (ud.type === 'inspector') {
+                const d = ud.data;
+                html = `<div class="tt-title">👷 ${d.name}</div>
+                    <div class="tt-row"><span class="k">班组</span><span>${d.team}</span></div>
+                    <div class="tt-row"><span class="k">当班</span><span>${d.shiftHours.toFixed(1)}h</span></div>
+                    <div class="tt-row"><span class="k">状态</span><span>${d.status}</span></div>`;
+            }
+            tooltip.innerHTML = html;
+            tooltip.style.display = 'block';
+            tooltip.style.left = (e.clientX + 15) + 'px';
+            tooltip.style.top = (e.clientY + 15) + 'px';
+            renderer.domElement.style.cursor = 'pointer';
+            return;
+        }
+    }
+    tooltip.style.display = 'none';
+    renderer.domElement.style.cursor = 'default';
+}
+
+function onWheel(e) {
+    e.preventDefault();
+    controls.zoom += e.deltaY * 0.1;
+    controls.zoom = Math.max(40, Math.min(200, controls.zoom));
+}
+
+function onClick(e) {
+    if (controls.isDragging) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(clickableObjects, true);
+    if (hits.length > 0) {
+        let obj = hits[0].object;
+        while (obj.parent && !obj.userData.type) obj = obj.parent;
+        if (obj.userData.type === 'wagon') showWagonDetail(obj.userData.data);
+        else if (obj.userData.type === 'locomotive') showLocomotiveDetail(obj.userData.data);
+        else if (obj.userData.type === 'inspector') showInspectorDetail(obj.userData.data);
+    }
+}
+
+function onResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// ========== 弹窗详情 ==========
+function showWagonDetail(w) {
+    addOperationLog('查看车辆', `车号:${w.wagonNo}`);
+    const recordsHtml = w.maintenanceRecords.map(r => `
+        <tr class="recordRow" onclick="showRecordDetail('${w.wagonNo}', ${r.id})">
+            <td>${r.date}</td><td>${r.time}</td><td>${r.item}</td>
+            <td><span class="badge ${r.result === '合格' ? 'ok' : r.result === '待复' ? 'warn' : 'bad'}">${r.result}</span></td>
+            <td>${r.inspector}</td>
+        </tr>`).join('');
+    const planHtml = w.transportPlan.map(p => `
+        <tr><td>${p.step}</td><td>${p.time}</td><td>${p.trainNo || '-'}</td>
+        <td>${p.detail}</td><td>${p.operator}</td></tr>`).join('');
+    const html = `
+        <div class="infoGrid">
+            <div class="infoItem"><div class="k">车号</div><div class="v">${w.wagonNo}</div></div>
+            <div class="infoItem"><div class="k">车型</div><div class="v">${w.type}</div></div>
+            <div class="infoItem"><div class="k">载重</div><div class="v">${w.weight}t</div></div>
+            <div class="infoItem"><div class="k">到站</div><div class="v">${w.destination}</div></div>
+            <div class="infoItem"><div class="k">车辆状态</div><div class="v">${w.status}</div></div>
+            <div class="infoItem"><div class="k">轴数</div><div class="v">${w.axles}</div></div>
+            <div class="infoItem"><div class="k">制动机</div><div class="v">${w.brakeType}</div></div>
+            <div class="infoItem"><div class="k">上次检修</div><div class="v">${w.lastCheck}</div></div>
+        </div>
+        <h4 style="color:#1e90ff;margin:15px 0 8px;">🔧 近7天检修记录（点击查看详情）</h4>
+        <table><thead><tr><th>日期</th><th>时间</th><th>项目</th><th>结果</th><th>检修人</th></tr></thead>
+        <tbody>${recordsHtml}</tbody></table>
+        <h4 style="color:#1e90ff;margin:20px 0 8px;">📋 运输计划</h4>
+        <table><thead><tr><th>步骤</th><th>时间</th><th>车次</th><th>详情</th><th>操作员</th></tr></thead>
+        <tbody>${planHtml}</tbody></table>
+    `;
+    document.getElementById('modalTitle').innerHTML = '🚃 车辆详情 - ' + w.wagonNo;
+    document.getElementById('modalBody').innerHTML = html;
+    document.getElementById('detailModal').classList.add('active');
+}
+
+function showRecordDetail(wagonNo, recordId) {
+    const wagon = wagons.find(w => w.wagonNo === wagonNo);
+    if (!wagon) return;
+    const r = wagon.maintenanceRecords.find(x => x.id === recordId);
+    if (!r) return;
+    const html = `
+        <div class="infoGrid">
+            <div class="infoItem"><div class="k">记录编号</div><div class="v">${r.recordNo}</div></div>
+            <div class="infoItem"><div class="k">车号</div><div class="v">${wagonNo}</div></div>
+            <div class="infoItem"><div class="k">检修日期</div><div class="v">${r.date}</div></div>
+            <div class="infoItem"><div class="k">检修时间</div><div class="v">${r.time}</div></div>
+            <div class="infoItem"><div class="k">检修项目</div><div class="v">${r.item}</div></div>
+            <div class="infoItem"><div class="k">检查结果</div><div class="v"><span class="badge ${r.result === '合格' ? 'ok' : r.result === '待复' ? 'warn' : 'bad'}">${r.result}</span></div></div>
+            <div class="infoItem"><div class="k">检修人员</div><div class="v">${r.inspector}</div></div>
+            <div class="infoItem"><div class="k">所属班组</div><div class="v">${r.team}</div></div>
+        </div>
+        <h4 style="color:#1e90ff;margin:10px 0 8px;">📝 检测详情</h4>
+        <div style="background:rgba(30,144,255,0.08);padding:12px;border-radius:5px;font-size:13px;line-height:1.8;">
+            ${r.details}
+        </div>
+        ${r.remark ? `<h4 style="color:#1e90ff;margin:15px 0 8px;">📌 备注</h4>
+        <div style="background:rgba(255,180,50,0.08);padding:12px;border-radius:5px;font-size:13px;line-height:1.8;color:#ffb432;">${r.remark}</div>` : ''}
+    `;
+    document.getElementById('recordModalTitle').innerHTML = '🔧 检修记录详情 - ' + r.recordNo;
+    document.getElementById('recordModalBody').innerHTML = html;
+    document.getElementById('recordModal').classList.add('active');
+}
+
+function closeRecordModal() {
+    document.getElementById('recordModal').classList.remove('active');
+}
+
+function showLocomotiveDetail(l) {
+    addOperationLog('查看机车', l.name);
+    const html = `
+        <div class="infoGrid">
+            <div class="infoItem"><div class="k">机车型号</div><div class="v">${l.name}</div></div>
+            <div class="infoItem"><div class="k">编号</div><div class="v">${l.id}</div></div>
+            <div class="infoItem"><div class="k">当前位置</div><div class="v">${l.location}</div></div>
+            <div class="infoItem"><div class="k">燃油量</div><div class="v" style="color:${l.fuel < 30 ? '#ff5050' : '#50c878'}">${l.fuel}%</div></div>
+            <div class="infoItem"><div class="k">状态</div><div class="v">${l.status}</div></div>
+            <div class="infoItem"><div class="k">当前任务</div><div class="v">${l.task || '待命'}</div></div>
+            <div class="infoItem"><div class="k">乘务组</div><div class="v">${l.crew}</div></div>
+            <div class="infoItem"><div class="k">上次检修</div><div class="v">${l.lastMaintain}</div></div>
+            <div class="infoItem"><div class="k">累计等待</div><div class="v" style="color:${l.waitMinutes > 10 ? '#ffb432' : '#fff'}">${l.waitMinutes} 分钟</div></div>
+            <div class="infoItem"><div class="k">今日已作业</div><div class="v">${l.workCount} 次</div></div>
+        </div>
+    `;
+    document.getElementById('modalTitle').innerHTML = '🚂 调车机车详情 - ' + l.name;
+    document.getElementById('modalBody').innerHTML = html;
+    document.getElementById('detailModal').classList.add('active');
+}
+
+function showInspectorDetail(ins) {
+    addOperationLog('查看列检员', ins.name);
+    const woHtml = workOrders.filter(w => w.inspectorId === ins.id).map(w => `
+        <div class="woCard">
+            <div class="woTitle">📋 ${w.orderNo}</div>
+            <div class="woRow"><span>车号</span><b>${w.wagonNo}</b></div>
+            <div class="woRow"><span>问题</span><b>${w.issue}</b></div>
+            <div class="woRow"><span>状态</span><b style="color:${w.status==='待处理'?'#ff5050':'#50c878'}">${w.status}</b></div>
+            <div class="woRow"><span>时间</span><b>${w.time}</b></div>
+        </div>`).join('') || '<div style="color:#a0c4ff;font-size:12px;text-align:center;padding:10px;">暂无扣修工单</div>';
+    const html = `
+        <div class="infoGrid">
+            <div class="infoItem"><div class="k">姓名</div><div class="v">${ins.name}</div></div>
+            <div class="infoItem"><div class="k">工号</div><div class="v">${ins.id}</div></div>
+            <div class="infoItem"><div class="k">班组</div><div class="v">${ins.team}</div></div>
+            <div class="infoItem"><div class="k">当班时长</div><div class="v">${ins.shiftHours.toFixed(1)} 小时</div></div>
+            <div class="infoItem"><div class="k">当前状态</div><div class="v">${ins.status}</div></div>
+            <div class="infoItem"><div class="k">已检车辆</div><div class="v">${ins.inspectedWagons.length} 辆</div></div>
+        </div>
+        <h4 style="color:#1e90ff;margin:15px 0 8px;">🔍 扫描车号检查</h4>
+        <div style="display:flex;gap:10px;margin-bottom:12px;">
+            <input id="scanWagonNo" class="btn" placeholder="输入车号如C70-2001" style="flex:1;background:rgba(30,144,255,0.1);border:1px solid #1e90ff;color:#fff;padding:8px;border-radius:4px;">
+            <button class="btn success" onclick="scanWagon('${ins.id}')">扫描检查</button>
+        </div>
+        <h4 style="color:#1e90ff;margin:15px 0 8px;">📋 已开具扣修工单</h4>
+        ${woHtml}
+    `;
+    document.getElementById('modalTitle').innerHTML = '👷 列检员详情 - ' + ins.name;
+    document.getElementById('modalBody').innerHTML = html;
+    document.getElementById('detailModal').classList.add('active');
+}
+
+function scanWagon(inspectorId) {
+    const wagonNo = document.getElementById('scanWagonNo').value.trim();
+    if (!wagonNo) { alert('请输入车号'); return; }
+    const ins = inspectors.find(i => i.id === inspectorId);
+    if (!ins) return;
+
+    const isFail = Math.random() < 0.25;
+    const items = ['制动系统', '车钩缓冲', '轮对轴箱', '转向架', '空气管路', '车体结构'];
+    const item = items[Math.floor(Math.random() * items.length)];
+    const checkTime = new Date();
+    const timeStr = checkTime.toLocaleString('zh-CN');
+
+    const wagon = wagons.find(w => {
+        const parts = w.wagonNo.split('-');
+        const suffix = parts.length > 1 ? parts[1] : w.wagonNo;
+        return w.wagonNo === wagonNo || wagonNo.endsWith(suffix);
+    });
+    const record = {
+        wagonNo: wagon ? wagon.wagonNo : wagonNo,
+        inspector: ins.name,
+        inspectorId: ins.id,
+        item,
+        time: timeStr,
+        result: isFail ? '不合格' : '合格',
+        details: isFail ? `${item}检测异常：测量值超出允许范围${(Math.random()*30+5).toFixed(1)}%，建议扣修处理` : `${item}各项指标正常，符合运用标准`
+    };
+
+    if (wagon) {
+        wagon.lastCheck = checkTime.toLocaleDateString('zh-CN');
+        wagon.maintenanceRecords.unshift({
+            id: Date.now(),
+            recordNo: 'JX' + Date.now(),
+            date: checkTime.toLocaleDateString('zh-CN'),
+            time: checkTime.toTimeString().slice(0, 5),
+            item,
+            result: record.result,
+            inspector: ins.name,
+            team: ins.team,
+            details: record.details,
+            remark: isFail ? '需扣修处理' : ''
+        });
+        if (isFail) {
+            wagon.status = '扣修';
+            const body = wagon.mesh.getObjectByName('wagonBody') || wagon.mesh.children.find(c => c.name === 'wagonBody');
+            if (body) {
+                body.material.color.setHex(0xff3030);
+                body.material.emissive = new THREE.Color(0xff0000);
+                body.material.emissiveIntensity = 0.3;
+            }
+            const wo = {
+                orderNo: 'WO' + Date.now(),
+                wagonNo: wagon.wagonNo,
+                inspectorId: ins.id,
+                inspector: ins.name,
+                issue: item + '故障',
+                detail: record.details,
+                status: '待处理',
+                time: timeStr,
+                priority: Math.random() < 0.3 ? '紧急' : '一般'
+            };
+            workOrders.unshift(wo);
+            addAlarm('warn', `${wagon.wagonNo} ${item}检测不合格，已生成扣修工单 ${wo.orderNo}`);
+            stats.abnormalCount++;
+        }
+        ins.inspectedWagons.push(wagon.wagonNo);
+    } else {
+        if (isFail) {
+            const wo = {
+                orderNo: 'WO' + Date.now(),
+                wagonNo,
+                inspectorId: ins.id,
+                inspector: ins.name,
+                issue: item + '故障',
+                detail: record.details,
+                status: '待处理',
+                time: timeStr,
+                priority: '一般'
+            };
+            workOrders.unshift(wo);
+            addAlarm('warn', `${wagonNo} ${item}检测不合格，已生成扣修工单 ${wo.orderNo}`);
+            stats.abnormalCount++;
+        }
+    }
+
+    ins.status = '检查车辆';
+    addOperationLog('车辆检查', `${ins.name} 检查 ${wagonNo} → ${record.result}`);
+    updateSidePanels();
+    showInspectorDetail(ins);
+}
+
+function closeModal() {
+    document.getElementById('detailModal').classList.remove('active');
+}
+
+// ========== 驼峰推送 & 速度控制 ==========
+function calculateOptimalSpeed(wagon) {
+    const baseSpeed = 7.0;
+    const weightFactor = 1 - (wagon.weight - 60) / 100;
+    const windFactor = 1 - windLevel * 0.15;
+    const gradeFactor = 1.1;
+    return Math.max(3.0, Math.min(8.0, baseSpeed * weightFactor * windFactor * gradeFactor));
+}
+
+function startPush() {
+    if (pushing) return;
+    pushing = true;
+    addOperationLog('驼峰操作', '开始推送');
+    addAlarm('info', '驼峰推送系统启动');
+    const pushingWagons = wagons.filter(w => w.area === 'arrival' && (w.status === '正常' || w.status === '待检')).slice(0, 5);
+    pushingWagons.forEach(w => {
+        w.status = '推送中';
+        w.pushProgress = 0;
+        optimalSpeed = calculateOptimalSpeed(w);
+        w.currentSpeed = optimalSpeed * 0.5;
+        currentSpeed = w.currentSpeed;
+    });
+    if (pushingWagons.length === 0) {
+        addAlarm('warn', '到达场暂无可用车辆进行推送');
+        pushing = false;
+    }
+}
+
+function stopPush() {
+    pushing = false;
+    addOperationLog('驼峰操作', '暂停推送');
+    addAlarm('warn', '驼峰推送已暂停');
+}
+
+function emergencyBrake() {
+    pushing = false;
+    currentSpeed = 0;
+    wagons.forEach(w => { if (w.status === '推送中' || w.status === '溜放中') w.status = '待检'; });
+    addOperationLog('紧急操作', '紧急制动');
+    addAlarm('warn', '⚠️ 已执行紧急制动！');
+    stats.abnormalCount++;
+    updateSidePanels();
+    updateSpeedDisplay();
+}
+
+function updateHumpWagons(dt) {
+    if (!pushing) return;
+    wagons.forEach(w => {
+        if (w.status === '推送中') {
+            optimalSpeed = calculateOptimalSpeed(w);
+            const targetSpeed = optimalSpeed + (Math.random() - 0.5) * 1.2;
+            w.currentSpeed = (w.currentSpeed || 0) + (targetSpeed - (w.currentSpeed || 0)) * dt * 2;
+            currentSpeed = w.currentSpeed;
+            w.pushProgress += w.currentSpeed * dt * 1.2;
+
+            if (w.mesh) {
+                w.mesh.position.x = -120 + w.pushProgress * 25;
+                if (w.pushProgress > 2 && w.pushProgress < 6) {
+                    w.mesh.position.z = -30 + (w.pushProgress - 2) * 5;
+                }
+            }
+
+            if (w.pushProgress >= 8) {
+                w.status = '溜放中';
+                w.rollSpeed = currentSpeed * 1.2;
+                w.trackNo = Math.ceil(Math.random() * MARSHALLING_TRACKS);
+                addOperationLog('溜放', `${w.wagonNo} 进入溜放，目标 ${w.trackNo} 道`);
+            }
+        } else if (w.status === '溜放中') {
+            w.rollSpeed *= (0.985 - windLevel * 0.01);
+            if (w.rollSpeed > 5) {
+                w.rollSpeed *= 0.96;
+            }
+            currentSpeed = w.rollSpeed;
+
+            if (w.mesh) {
+                w.mesh.position.x += Math.cos(Math.PI / 6) * w.rollSpeed * dt * 3;
+                w.mesh.position.z += Math.sin(Math.PI / 6) * (w.trackNo - 4) * w.rollSpeed * dt * 0.5;
+            }
+
+            if (w.rollSpeed <= 1.0) {
+                w.status = '已连挂';
+                w.couplingSpeed = parseFloat((w.rollSpeed * 3.6).toFixed(1));
+                w.area = 'marshalling';
+                stats.formCount++;
+                addOperationLog('连挂', `${w.wagonNo} 连挂完成，速度 ${w.couplingSpeed} km/h`);
+
+                if (w.couplingSpeed > 5) {
+                    setTrackRed('marshalling', w.trackNo, true);
+                    addAlarm('warn', `⚠️ ${w.wagonNo} 连挂速度 ${w.couplingSpeed}km/h 超限！轨道已红色报警`);
+                    triggerSoundLightAlarm(`连挂超速！车号 ${w.wagonNo} 速度 ${w.couplingSpeed}km/h`);
+                    stats.abnormalCount++;
+                    stats.couplingRate = Math.max(80, stats.couplingRate - 0.5);
+                } else {
+                    stats.couplingRate = Math.min(99.9, stats.couplingRate + 0.1);
+                }
+                updateSidePanels();
+            }
+        }
+    });
+    updateSpeedDisplay();
+}
+
+function setTrackRed(areaName, trackNo, isRed) {
+    trackSegments.forEach(ts => {
+        if (ts.area === areaName && (ts.trackNo === trackNo || trackNo === -1)) {
+            ts.targetRed = isRed ? 1 : 0;
+        }
+    });
+    if (isRed) {
+        setTimeout(() => {
+            trackSegments.forEach(ts => {
+                if (ts.area === areaName && (ts.trackNo === trackNo || trackNo === -1)) {
+                    ts.targetRed = 0;
+                }
+            });
+        }, 3000);
+    }
+}
+
+function updateSpeedDisplay() {
+    const spd = parseFloat(currentSpeed.toFixed(1));
+    document.getElementById('pushSpeed').textContent = spd;
+    document.getElementById('speedFill').style.width = Math.min(100, spd * 10) + '%';
+    document.getElementById('speedLabel').textContent = spd + ' km/h';
+    document.getElementById('recSpeed').textContent = optimalSpeed.toFixed(1);
+    updateSpeed3DRuler(spd);
+}
+
+// ========== 车流预报 & 解体计划 ==========
+function generateInitialFlowForecast() {
+    const trains = [];
+    for (let i = 0; i < 3; i++) {
+        const wagonList = [];
+        const count = 15 + Math.floor(Math.random() * 15);
+        for (let j = 0; j < count; j++) {
+            wagonList.push({
+                wagonNo: WAGON_TYPES[Math.floor(Math.random() * WAGON_TYPES.length)] + '-' + (1000 + Math.floor(Math.random() * 9000)),
+                type: WAGON_TYPES[Math.floor(Math.random() * WAGON_TYPES.length)],
+                weight: 50 + Math.floor(Math.random() * 40),
+                destination: STATIONS[Math.floor(Math.random() * STATIONS.length)],
+                status: WAGON_STATUS[Math.floor(Math.random() * 3)]
+            });
+        }
+        trains.push({
+            trainNo: 'X' + (10000 + Math.floor(Math.random() * 89999)),
+            arrivalTime: new Date(Date.now() + i * 30 * 60000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+            origin: STATIONS[Math.floor(Math.random() * STATIONS.length)],
+            wagonCount: count,
+            wagons: wagonList
+        });
+    }
+    currentFlowForecast = { trains, generateTime: new Date().toLocaleString('zh-CN') };
+    generateBreakPlan();
+}
+
+function generateNewFlowForecast() {
+    const wagonList = [];
+    const count = 12 + Math.floor(Math.random() * 18);
+    for (let j = 0; j < count; j++) {
+        wagonList.push({
+            wagonNo: WAGON_TYPES[Math.floor(Math.random() * WAGON_TYPES.length)] + '-' + (1000 + Math.floor(Math.random() * 9000)),
+            type: WAGON_TYPES[Math.floor(Math.random() * WAGON_TYPES.length)],
+            weight: 50 + Math.floor(Math.random() * 40),
+            destination: STATIONS[Math.floor(Math.random() * STATIONS.length)],
+            status: '正常'
+        });
+    }
+    const newTrain = {
+        trainNo: 'X' + (10000 + Math.floor(Math.random() * 89999)),
+        arrivalTime: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+        origin: STATIONS[Math.floor(Math.random() * STATIONS.length)],
+        wagonCount: count,
+        wagons: wagonList
+    };
+    if (!currentFlowForecast) currentFlowForecast = { trains: [], generateTime: '' };
+    currentFlowForecast.trains.push(newTrain);
+    if (currentFlowForecast.trains.length > 5) currentFlowForecast.trains.shift();
+    currentFlowForecast.generateTime = new Date().toLocaleString('zh-CN');
+    generateBreakPlan();
+    addAlarm('info', `新到列车 ${newTrain.trainNo} 预报，${newTrain.wagonCount} 辆，已自动生成解体计划`);
+    stats.breakCount++;
+    updateSidePanels();
+}
+
+function generateBreakPlan() {
+    breakPlans = [];
+    arrows.forEach(a => scene.remove(a));
+    arrows = [];
+
+    if (!currentFlowForecast) return;
+    const allWagons = [];
+    currentFlowForecast.trains.forEach(t => t.wagons.forEach(w => allWagons.push(w)));
+
+    const trackDestMap = {};
+    const destList = [...new Set(allWagons.map(w => w.destination))];
+    destList.forEach((dest, idx) => {
+        trackDestMap[idx % MARSHALLING_TRACKS + 1] = dest;
+    });
+
+    for (let t = 1; t <= MARSHALLING_TRACKS; t++) {
+        const dest = trackDestMap[t] || STATIONS[t - 1] || '备用';
+        const trackWagons = allWagons.filter(w => w.destination === dest);
+        breakPlans.push({
+            trackNo: t,
+            destination: dest,
+            wagonCount: trackWagons.length,
+            wagons: trackWagons.slice(0, 5),
+            priority: trackWagons.length > 10 ? '高' : trackWagons.length > 5 ? '中' : '低',
+            estimatedTime: `${(t * 3).toString().padStart(2, '0')}:${(Math.random() * 59).toFixed(0).padStart(2, '0')}`
+        });
+
+        const color = DEST_COLORS[dest] || 0xa855f7;
+        const startX = 0, startZ = -30;
+        const endX = 60 + Math.random() * 20;
+        const endZ = -45 + (t - 1) * 12;
+        const from = new THREE.Vector3(startX, 3, startZ);
+        const to = new THREE.Vector3(endX, 1.5, endZ);
+        const dir = to.clone().sub(from).normalize();
+        const len = from.distanceTo(to);
+        const arrow = new THREE.ArrowHelper(dir, from, len, color, 4, 2);
+        arrow.userData = { type: 'arrow', pulse: 0, dest };
+        scene.add(arrow);
+        arrows.push(arrow);
+    }
+    updateBreakPlanDisplay();
+}
+
+function updateBreakPlanDisplay() {
+    const html = breakPlans.map(p => {
+        const color = '#' + (DEST_COLORS[p.destination] || 0x1e90ff).toString(16).padStart(6, '0');
+        return `<div class="planRow">
+            <span class="trackNo" style="color:${color};">${p.trackNo}道</span>
+            <span class="dest">→ ${p.destination}</span>
+            <span class="count">${p.wagonCount}辆</span>
+            <span class="badge ${p.priority==='高'?'bad':p.priority==='中'?'warn':'info'}">${p.priority}</span>
+        </div>`;
+    }).join('');
+    document.getElementById('planList').innerHTML = html || '<div style="font-size:12px;color:#a0c4ff;text-align:center;padding:15px;">暂无解体计划</div>';
+}
+
+function checkConflicts() {
+    const rolling = wagons.filter(w => w.status === '溜放中');
+    for (let i = 0; i < rolling.length; i++) {
+        for (let j = i + 1; j < rolling.length; j++) {
+            const a = rolling[i], b = rolling[j];
+            if (!a.mesh || !b.mesh) continue;
+            const dist = a.mesh.position.distanceTo(b.mesh.position);
+            if (dist < 8) {
+                const prob = Math.min(99, (8 - dist) * 12 + 20);
+                if (prob > 80) {
+                    addAlarm('warn', `⚠️ 冲突概率 ${prob.toFixed(0)}%！${a.wagonNo} 与 ${b.wagonNo} 距离过近，已自动减速并调整溜放顺序`);
+                    stats.abnormalCount++;
+                    a.rollSpeed *= 0.7;
+                    b.rollSpeed *= 0.5;
+                    const tmp = a.trackNo; a.trackNo = b.trackNo; b.trackNo = tmp;
+                    updateSidePanels();
+                }
+            }
+        }
+    }
+}
+
+// ========== 机车调度 ==========
+function dispatchLocomotives() {
+    locomotives.forEach(loco => {
+        if (!loco.waitMinutes) loco.waitMinutes = 0;
+        if (!loco.workCount) loco.workCount = 0;
+        if (loco.status === '待命' || loco.status === '等待中') {
+            loco.waitMinutes += 0.5;
+            if (loco.waitMinutes >= 15) {
+                const oldTask = loco.task || '无';
+                loco.waitMinutes = 0;
+                loco.workCount++;
+                const tasks = ['编组3道', '牵引出发场', '调车5道', '推送驼峰', '转线作业'];
+                loco.task = tasks[Math.floor(Math.random() * tasks.length)];
+                loco.status = '作业中';
+                loco.location = ['到达场', '调车场', '出发场', '驼峰区'][Math.floor(Math.random() * 4)];
+                addAlarm('info', `🚂 ${loco.name} 等待超时，已重新排班：${loco.task}`);
+                addOperationLog('机车调度', `${loco.name} 重新排班：${oldTask} → ${loco.task}`);
+            }
+        } else if (loco.status === '作业中') {
+            if (Math.random() < 0.03) {
+                loco.status = '等待中';
+                loco.task = '等待下一任务';
+                loco.waitMinutes = 0;
+            }
+        }
+        loco.fuel = Math.max(5, loco.fuel - Math.random() * 0.1);
+    });
+    updateLocomotiveDisplay();
+}
+
+function updateLocomotiveDisplay() {
+    const html = locomotives.map(l => `
+        <div class="alarmItem info" style="cursor:pointer;" onclick="showLocomotiveDetailById('${l.id}')">
+            <div class="time">${l.location} | 油量 ${l.fuel.toFixed(0)}%</div>
+            <div class="msg"><b>${l.name}</b> - ${l.status}${l.waitMinutes > 10 ? `<span style="color:#ffb432"> (等待${l.waitMinutes.toFixed(0)}分)</span>` : ''}</div>
+            <div style="font-size:11px;color:#a0c4ff;margin-top:3px;">${l.task || '待命'}</div>
+        </div>`).join('');
+    document.getElementById('locomotiveList').innerHTML = html;
+}
+
+function showLocomotiveDetailById(id) {
+    const l = locomotives.find(x => x.id === id);
+    if (l) showLocomotiveDetail(l);
+}
+
+function updateInspectorDisplay() {
+    const html = inspectors.map(i => `
+        <div class="alarmItem info" style="cursor:pointer;" onclick="showInspectorDetailById('${i.id}')">
+            <div class="time">${i.team} | 当班 ${i.shiftHours.toFixed(1)}h</div>
+            <div class="msg"><b>${i.name}</b> - ${i.status}</div>
+            <div style="font-size:11px;color:#a0c4ff;margin-top:3px;">已检 ${i.inspectedWagons.length} 辆${i.isInDanger ? `<span style="color:#ff5050"> ⚠️危险区</span>` : ''}</div>
+        </div>`).join('');
+    document.getElementById('inspectorList').innerHTML = html;
+}
+
+function showInspectorDetailById(id) {
+    const i = inspectors.find(x => x.id === id);
+    if (i) showInspectorDetail(i);
+}
+
+// ========== 危险区检测 & 声光报警 ==========
+function checkDangerZones() {
+    inspectors.forEach(ins => {
+        if (!ins.mesh) return;
+        let inDanger = false;
+        dangerZones.forEach(dz => {
+            const dx = Math.abs(ins.mesh.position.x - dz.position.x);
+            const dz_ = Math.abs(ins.mesh.position.z - dz.position.z);
+            if (dx < dz.userData.width / 2 && dz_ < dz.userData.depth / 2) inDanger = true;
+        });
+
+        if (inDanger && !ins.isInDanger) {
+            ins.isInDanger = true;
+            ins.dangerFlashTimer = 0;
+            addAlarm('warn', `⚠️ ${ins.name} 进入驼峰危险区！`);
+            addOperationLog('危险报警', `${ins.name} 进入驼峰危险区`);
+            triggerSoundLightAlarm(`${ins.name} 进入驼峰危险区！请注意安全！`);
+            stats.abnormalCount++;
+            updateSidePanels();
+        } else if (!inDanger && ins.isInDanger) {
+            ins.isInDanger = false;
+            const body = ins.mesh.getObjectByName('inspectorBody');
+            const head = ins.mesh.getObjectByName('inspectorHead');
+            if (body) body.material.color.setHex(0xff8800);
+            if (head) head.material.color.setHex(0xffcc99);
+        }
+    });
+}
+
+function triggerSoundLightAlarm(msg) {
+    alarmActive = true;
+    const overlay = document.getElementById('alarmOverlay');
+    const alarmFlash = document.getElementById('alarmFlash');
+    const alarmText = document.getElementById('alarmText');
+    overlay.style.display = 'block';
+    alarmFlash.style.animation = 'alarmFlash 0.4s infinite';
+    alarmText.textContent = '⚠️ ' + (msg || '危险警报！');
+    if (alarmTimer) clearTimeout(alarmTimer);
+    alarmTimer = setTimeout(() => {
+        overlay.style.display = 'none';
+        alarmActive = false;
+    }, 6000);
+}
+
+function updateInspectorDangerFlash(dt) {
+    inspectors.forEach(ins => {
+        if (!ins.isInDanger || !ins.mesh) return;
+        ins.dangerFlashTimer = (ins.dangerFlashTimer || 0) + dt;
+        const body = ins.mesh.getObjectByName('inspectorBody');
+        const head = ins.mesh.getObjectByName('inspectorHead');
+        const flashOn = Math.sin(ins.dangerFlashTimer * 8) > 0;
+        if (body) body.material.color.setHex(flashOn ? 0xff2020 : 0xff8800);
+        if (head) head.material.color.setHex(flashOn ? 0xff6060 : 0xffcc99);
+    });
+}
+
+// ========== 登录登出 & 日志 ==========
+function doLogin() {
+    const roleEl = document.querySelector('input[name="role"]:checked');
+    currentRole = roleEl ? roleEl.value : 'shunter';
+    currentUser = { shunter: '张工', stationmaster: '李站长', bureau: '王调度' }[currentRole];
+    document.getElementById('userName').textContent = currentUser;
+    document.getElementById('userRole').textContent = ROLE_NAMES[currentRole];
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('container').style.display = 'block';
+
+    const log = {
+        id: 'LOG' + Date.now(),
+        user: currentUser,
+        role: ROLE_NAMES[currentRole],
+        action: '登录',
+        time: new Date().toLocaleString('zh-CN'),
+        ip: '192.168.1.' + (100 + Math.floor(Math.random() * 100)),
+        method: '人脸识别',
+        result: '成功'
+    };
+    loginLogs.unshift(log);
+    addOperationLog('系统登录', `${currentUser}(${ROLE_NAMES[currentRole]}) 登录系统`);
+    addAlarm('info', `${currentUser}(${ROLE_NAMES[currentRole]}) 登录系统`);
+    setTimeout(onResize, 100);
+}
+
+function doLogout() {
+    const log = {
+        id: 'LOG' + Date.now(),
+        user: currentUser,
+        role: ROLE_NAMES[currentRole],
+        action: '登出',
+        time: new Date().toLocaleString('zh-CN'),
+        ip: '192.168.1.' + (100 + Math.floor(Math.random() * 100)),
+        method: '手动',
+        result: '成功'
+    };
+    loginLogs.unshift(log);
+    addOperationLog('系统登出', `${currentUser} 退出系统`);
+    document.getElementById('container').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+}
+
+function addAlarm(level, msg) {
+    const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    alarmLogs.unshift({ id: Date.now(), time, level, msg });
+    if (alarmLogs.length > 50) alarmLogs.pop();
+    const html = alarmLogs.slice(0, 20).map(a =>
+        `<div class="alarmItem ${a.level === 'warn' ? 'warn' : a.level === 'info' ? 'info' : ''}">
+            <div class="time">${a.time}</div>
+            <div class="msg">${a.msg}</div>
+        </div>`).join('');
+    document.getElementById('alarmList').innerHTML = html;
+}
+
+function addOperationLog(action, detail) {
+    operationLogs.unshift({
+        id: 'OP' + Date.now(),
+        time: new Date().toLocaleString('zh-CN'),
+        user: currentUser,
+        role: ROLE_NAMES[currentRole],
+        action,
+        detail
+    });
+    if (operationLogs.length > 200) operationLogs.pop();
+}
+
+function generateShiftRecords() {
+    shiftRecords = [];
+    const shifts = ['白班', '夜班'];
+    const now = new Date();
+    for (let i = 0; i < 14; i++) {
+        const d = new Date(now.getTime() - i * 12 * 3600 * 1000);
+        shiftRecords.push({
+            date: d.toLocaleDateString('zh-CN'),
+            shift: shifts[i % 2],
+            operator: ['张工', '李工', '王工', '赵工'][i % 4],
+            breakCount: 20 + Math.floor(Math.random() * 15),
+            formCount: 15 + Math.floor(Math.random() * 15),
+            couplingRate: (93 + Math.random() * 6.5).toFixed(1),
+            abnormalCount: Math.floor(Math.random() * 5),
+            wagonCount: 300 + Math.floor(Math.random() * 200),
+            humpSpeed: (4.5 + Math.random() * 2).toFixed(1)
+        });
+    }
+}
+
+// ========== 面板更新 ==========
+function updateSidePanels() {
+    document.getElementById('statBreak').innerHTML = stats.breakCount + '<span class="unit">列</span>';
+    document.getElementById('statForm').innerHTML = stats.formCount + '<span class="unit">列</span>';
+    document.getElementById('statRate').innerHTML = stats.couplingRate.toFixed(1) + '<span class="unit">%</span>';
+    document.getElementById('statAbn').innerHTML = stats.abnormalCount + '<span class="unit">次</span>';
+    updateLocomotiveDisplay();
+    updateInspectorDisplay();
+}
+
+function updateSystemTime() {
+    const now = new Date();
+    document.getElementById('sysTime').textContent = now.toLocaleTimeString('zh-CN');
+    const h = now.getHours();
+    document.getElementById('curShift').textContent = (h >= 8 && h < 20) ? '白班' : '夜班';
+    inspectors.forEach(i => { i.shiftHours = Math.min(12, i.shiftHours + 1 / 3600); });
+}
+
+function simulateOperation() {
+    if (Math.random() < 0.3 && !pushing) {
+        const availableWagons = wagons.filter(w => w.area === 'arrival' && w.status === '正常');
+        if (availableWagons.length > 0) startPush();
+    }
+    if (Math.random() < 0.2 && pushing) {
+        const stillPushing = wagons.some(w => w.status === '推送中' || w.status === '溜放中');
+        if (!stillPushing) stopPush();
+    }
+    checkConflicts();
+    dispatchLocomotives();
+    updateSidePanels();
+}
+
+// ========== 视图切换 ==========
+function setView(view) {
+    const views = {
+        global: { x: 0, z: 0, zoom: 120, rotY: 0.6, rotX: 0.5 },
+        arrival: { x: -100, z: 0, zoom: 60, rotY: 0.3, rotX: 0.6 },
+        hump: { x: 0, z: -30, zoom: 50, rotY: 0.5, rotX: 0.7 },
+        marshalling: { x: 80, z: 0, zoom: 70, rotY: -0.3, rotX: 0.5 },
+        departure: { x: 120, z: 0, zoom: 60, rotY: -0.5, rotX: 0.6 }
+    };
+    const v = views[view] || views.global;
+    controls.targetX = v.x;
+    controls.targetZ = v.z;
+    controls.zoom = v.zoom;
+    controls.rot.y = v.rotY;
+    controls.rot.x = v.rotX;
+    document.getElementById('curView').textContent = { global: '全局视图', arrival: '到达场', hump: '驼峰', marshalling: '调车场', departure: '出发场' }[view];
+    addOperationLog('视图切换', '切换到 ' + document.getElementById('curView').textContent);
+}
+
+// ========== Excel导出 ==========
+function exportExcel() {
+    if (typeof XLSX === 'undefined') { alert('Excel导出库加载失败'); return; }
+    addOperationLog('数据导出', '导出班次统计Excel');
+
+    const ws1 = XLSX.utils.json_to_sheet(shiftRecords.map(s => ({
+        '日期': s.date, '班次': s.shift, '值班员': s.operator,
+        '解体列数': s.breakCount, '编组列数': s.formCount,
+        '连挂达标率(%)': s.couplingRate, '异常事件次数': s.abnormalCount,
+        '作业车辆数': s.wagonCount, '平均推送速度(km/h)': s.humpSpeed
+    })));
+    ws1['!cols'] = [{ wch: 12 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 16 }];
+
+    const ws2 = XLSX.utils.json_to_sheet(alarmLogs.map(a => ({
+        '时间': a.time, '级别': a.level === 'warn' ? '告警' : a.level === 'info' ? '信息' : '严重', '内容': a.msg
+    })));
+    ws2['!cols'] = [{ wch: 12 }, { wch: 8 }, { wch: 60 }];
+
+    const ws3 = XLSX.utils.json_to_sheet(operationLogs.slice(0, 100).map(o => ({
+        '时间': o.time, '用户': o.user, '角色': o.role, '操作类型': o.action, '详情': o.detail
+    })));
+    ws3['!cols'] = [{ wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 50 }];
+
+    const ws4 = XLSX.utils.json_to_sheet(loginLogs.map(l => ({
+        '日志ID': l.id, '时间': l.time, '用户': l.user, '角色': l.role,
+        '操作': l.action, '认证方式': l.method, 'IP地址': l.ip, '结果': l.result
+    })));
+    ws4['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 16 }, { wch: 8 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, '作业统计');
+    XLSX.utils.book_append_sheet(wb, ws2, '告警记录');
+    XLSX.utils.book_append_sheet(wb, ws3, '操作日志');
+    XLSX.utils.book_append_sheet(wb, ws4, '登录日志');
+
+    const fname = `编组站作业统计_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(wb, fname);
+    addAlarm('info', `📥 Excel报表已导出：${fname}`);
+}
+
+// ========== 动画主循环 ==========
+let lastTime = performance.now();
+function animate() {
+    requestAnimationFrame(animate);
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - lastTime) / 1000);
+    lastTime = now;
+    globalTime += dt;
+
+    camera.position.x = controls.targetX + Math.sin(controls.rot.y) * Math.cos(controls.rot.x) * controls.zoom;
+    camera.position.y = Math.sin(controls.rot.x) * controls.zoom * 0.6 + 20;
+    camera.position.z = controls.targetZ + Math.cos(controls.rot.y) * Math.cos(controls.rot.x) * controls.zoom;
+    camera.lookAt(controls.targetX, 5, controls.targetZ);
+
+    controls.targetX += (0 - controls.targetX) * 0.002;
+    controls.targetZ += (0 - controls.targetZ) * 0.002;
+
+    updateHumpWagons(dt);
+    checkDangerZones();
+    updateInspectorDangerFlash(dt);
+    updateTrackColorAnimation(dt);
+
+    arrows.forEach(a => {
+        a.userData.pulse = (a.userData.pulse || 0) + dt * 3;
+        const s = 1 + Math.sin(a.userData.pulse) * 0.1;
+        a.setLength(a.length * 1, 3 * s, 1.5 * s);
+    });
+
+    inspectors.forEach(ins => {
+        if (!ins.mesh) return;
+        if (!ins.isInDanger) {
+            const dx = (ins.targetX || ins.mesh.position.x) - ins.mesh.position.x;
+            const dz = (ins.targetZ || ins.mesh.position.z) - ins.mesh.position.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            if (dist > 0.5) {
+                ins.mesh.position.x += (dx / dist) * dt * 1.5;
+                ins.mesh.position.z += (dz / dist) * dt * 1.5;
+            } else if (Math.random() < 0.005) {
+                ins.targetX = ins.mesh.position.x + (Math.random() - 0.5) * 30;
+                ins.targetZ = ins.mesh.position.z + (Math.random() - 0.5) * 30;
+                ins.targetX = Math.max(-150, Math.min(150, ins.targetX));
+                ins.targetZ = Math.max(-80, Math.min(80, ins.targetZ));
+            }
+        }
+        const label = ins.mesh.getObjectByName('inspectorLabel');
+        if (label && label.material.map) {
+            const ctx = label.material.map.image.getContext('2d');
+            ctx.fillStyle = 'rgba(10,30,60,0.9)';
+            ctx.fillRect(0, 0, 256, 96);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 32px Microsoft YaHei';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(ins.name, 128, 32);
+            ctx.fillStyle = ins.isInDanger ? '#ff5050' : '#a0c4ff';
+            ctx.font = '24px Microsoft YaHei';
+            ctx.fillText((ins.isInDanger ? '⚠️ ' : '当班 ') + ins.shiftHours.toFixed(1) + 'h', 128, 70);
+            label.material.map.needsUpdate = true;
+        }
+    });
+
+    renderer.render(scene, camera);
+}
+
+function updateTrackColorAnimation(dt) {
+    trackSegments.forEach(ts => {
+        if (ts.targetRed === undefined) ts.targetRed = 0;
+        if (ts.curRed === undefined) ts.curRed = 0;
+        ts.curRed += (ts.targetRed - ts.curRed) * dt * 3;
+        const c = new THREE.Color().lerpColors(
+            new THREE.Color(0x4a4a5a),
+            new THREE.Color(0xff2020),
+            ts.curRed
+        );
+        if (ts.mesh && ts.mesh.material) {
+            ts.mesh.material.color.copy(c);
+            if (ts.curRed > 0.5) {
+                ts.mesh.material.emissive = new THREE.Color(0xff0000);
+                ts.mesh.material.emissiveIntensity = ts.curRed * 0.5;
+            } else {
+                ts.mesh.material.emissive = new THREE.Color(0x000000);
+                ts.mesh.material.emissiveIntensity = 0;
+            }
+        }
+    });
+}
+
+window.addEventListener('DOMContentLoaded', init);
