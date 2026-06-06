@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D智慧铁路编组站驼峰调度与安全管控可视化平台</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Microsoft YaHei", sans-serif; background: #0a1628; color: #fff; overflow: hidden; width: 100vw; height: 100vh; }
+
+#loginScreen { position: fixed; inset: 0; background: linear-gradient(135deg, #0a1628 0%, #1a2a4a 100%); z-index: 10000; display: flex; justify-content: center; align-items: center; }
+.loginBox { background: rgba(10, 30, 60, 0.9); padding: 40px 50px; border: 1px solid #1e90ff; border-radius: 12px; box-shadow: 0 0 40px rgba(30, 144, 255, 0.3); text-align: center; min-width: 380px; }
+.loginBox h2 { color: #1e90ff; margin-bottom: 30px; font-size: 22px; }
+.faceScan { width: 180px; height: 180px; border: 3px solid #1e90ff; border-radius: 50%; margin: 0 auto 20px; display: flex; justify-content: center; align-items: center; position: relative; overflow: hidden; background: rgba(30, 144, 255, 0.1); }
+.faceScan::before { content: ''; position: absolute; width: 100%; height: 2px; background: #1e90ff; box-shadow: 0 0 10px #1e90ff; animation: scanLine 2s linear infinite; }
+@keyframes scanLine { 0% { top: 0; } 100% { top: 100%; } }
+.faceIcon { font-size: 80px; opacity: 0.7; }
+.roleSelect { margin: 20px 0; }
+.roleSelect label { display: block; margin: 10px 0; cursor: pointer; padding: 8px 12px; border: 1px solid #1e90ff; border-radius: 6px; transition: all 0.3s; }
+.roleSelect label:hover, .roleSelect label.selected { background: rgba(30, 144, 255, 0.2); }
+.roleSelect input { margin-right: 10px; }
+.loginBtn { background: linear-gradient(135deg, #1e90ff, #0066cc); color: #fff; border: none; padding: 12px 40px; font-size: 16px; border-radius: 6px; cursor: pointer; margin-top: 15px; transition: all 0.3s; }
+.loginBtn:hover { box-shadow: 0 0 20px rgba(30, 144, 255, 0.6); transform: translateY(-2px); }
+
+#container { position: relative; width: 100%; height: 100%; }
+#canvas3d { position: absolute; inset: 0; }
+
+.topBar { position: absolute; top: 0; left: 0; right: 0; height: 60px; background: linear-gradient(180deg, rgba(10, 30, 60, 0.95), rgba(10, 30, 60, 0.7)); border-bottom: 1px solid #1e90ff; display: flex; align-items: center; justify-content: space-between; padding: 0 25px; z-index: 100; }
+.topBar h1 { font-size: 20px; color: #1e90ff; letter-spacing: 2px; }
+.topBar .info { display: flex; gap: 30px; font-size: 13px; }
+.topBar .info span { color: #a0c4ff; }
+.topBar .info b { color: #fff; margin-left: 6px; }
+.topBar .userInfo { display: flex; align-items: center; gap: 12px; }
+.topBar .userInfo .roleTag { padding: 4px 12px; background: #1e90ff; border-radius: 4px; font-size: 12px; }
+.topBar .userInfo button { background: rgba(255, 100, 100, 0.2); border: 1px solid #ff6464; color: #ff6464; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+
+.sidePanel { position: absolute; top: 70px; left: 15px; width: 300px; max-height: calc(100vh - 90px); background: rgba(10, 30, 60, 0.9); border: 1px solid #1e90ff; border-radius: 8px; padding: 15px; overflow-y: auto; z-index: 90; }
+.sidePanel::-webkit-scrollbar { width: 6px; }
+.sidePanel::-webkit-scrollbar-thumb { background: #1e90ff; border-radius: 3px; }
+.panelTitle { font-size: 15px; color: #1e90ff; border-left: 3px solid #1e90ff; padding-left: 10px; margin-bottom: 15px; }
+.statCard { background: rgba(30, 144, 255, 0.08); border: 1px solid rgba(30, 144, 255, 0.3); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+.statCard .label { font-size: 12px; color: #a0c4ff; }
+.statCard .value { font-size: 24px; color: #fff; margin-top: 4px; font-weight: bold; }
+.statCard .value .unit { font-size: 12px; color: #a0c4ff; font-weight: normal; margin-left: 4px; }
+
+.rightPanel { position: absolute; top: 70px; right: 15px; width: 320px; max-height: calc(100vh - 90px); background: rgba(10, 30, 60, 0.9); border: 1px solid #1e90ff; border-radius: 8px; padding: 15px; overflow-y: auto; z-index: 90; }
+.rightPanel::-webkit-scrollbar { width: 6px; }
+.rightPanel::-webkit-scrollbar-thumb { background: #1e90ff; border-radius: 3px; }
+
+.alarmItem { background: rgba(255, 80, 80, 0.1); border-left: 3px solid #ff5050; padding: 10px; margin-bottom: 8px; font-size: 12px; border-radius: 4px; }
+.alarmItem.warn { background: rgba(255, 180, 50, 0.1); border-left-color: #ffb432; }
+.alarmItem.info { background: rgba(80, 200, 120, 0.1); border-left-color: #50c878; }
+.alarmItem .time { color: #a0c4ff; font-size: 11px; }
+.alarmItem .msg { margin-top: 4px; color: #fff; }
+
+.speedGauge { position: relative; width: 100%; height: 40px; background: rgba(30, 144, 255, 0.1); border-radius: 5px; overflow: hidden; border: 1px solid rgba(30, 144, 255, 0.3); margin-top: 8px; }
+.speedFill { position: absolute; left: 0; top: 0; height: 100%; background: linear-gradient(90deg, #50c878, #ffb432, #ff5050); transition: width 0.3s; }
+.speedLabel { position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 14px; text-shadow: 0 0 4px #000; }
+
+.btn { background: linear-gradient(135deg, #1e90ff, #0066cc); color: #fff; border: none; padding: 8px 16px; font-size: 13px; border-radius: 4px; cursor: pointer; margin: 4px; transition: all 0.2s; }
+.btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(30, 144, 255, 0.4); }
+.btn.danger { background: linear-gradient(135deg, #ff6464, #cc3333); }
+.btn.success { background: linear-gradient(135deg, #50c878, #2e8b57); }
+.btn.warn { background: linear-gradient(135deg, #ffb432, #cc8800); }
+
+.bottomPanel { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); background: rgba(10, 30, 60, 0.95); border: 1px solid #1e90ff; border-radius: 8px; padding: 12px 20px; display: flex; gap: 10px; align-items: center; z-index: 90; }
+.legend { display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 0 8px; }
+.legend .color { width: 14px; height: 14px; border-radius: 3px; }
+
+.modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); z-index: 1000; display: none; justify-content: center; align-items: center; }
+.modal.active { display: flex; }
+.modalBox { background: #0a1e3c; border: 1px solid #1e90ff; border-radius: 10px; min-width: 500px; max-width: 80vw; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; }
+.modalHeader { background: rgba(30, 144, 255, 0.2); padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e90ff; }
+.modalHeader h3 { color: #1e90ff; font-size: 17px; }
+.modalHeader .close { background: none; border: none; color: #a0c4ff; font-size: 22px; cursor: pointer; }
+.modalBody { padding: 20px; overflow-y: auto; }
+.infoGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
+.infoItem { background: rgba(30, 144, 255, 0.08); padding: 10px 14px; border-radius: 5px; border-left: 3px solid #1e90ff; }
+.infoItem .k { font-size: 12px; color: #a0c4ff; }
+.infoItem .v { font-size: 15px; color: #fff; margin-top: 3px; font-weight: bold; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table th { background: rgba(30, 144, 255, 0.2); padding: 10px; text-align: left; color: #1e90ff; border-bottom: 1px solid #1e90ff; }
+table td { padding: 9px 10px; border-bottom: 1px solid rgba(30, 144, 255, 0.2); }
+table tr:hover td { background: rgba(30, 144, 255, 0.05); }
+.badge { padding: 3px 8px; border-radius: 3px; font-size: 11px; }
+.badge.ok { background: rgba(80, 200, 120, 0.2); color: #50c878; }
+.badge.bad { background: rgba(255, 80, 80, 0.2); color: #ff5050; }
+.badge.warn { background: rgba(255, 180, 50, 0.2); color: #ffb432; }
+.badge.info { background: rgba(30, 144, 255, 0.2); color: #1e90ff; }
+
+.tooltip { position: absolute; background: rgba(0, 0, 0, 0.85); padding: 8px 12px; border-radius: 5px; font-size: 12px; pointer-events: none; z-index: 500; border: 1px solid #1e90ff; display: none; min-width: 150px; }
+.tooltip .tt-title { color: #1e90ff; font-weight: bold; margin-bottom: 4px; }
+.tooltip .tt-row { display: flex; justify-content: space-between; margin: 2px 0; }
+.tooltip .tt-row .k { color: #a0c4ff; margin-right: 10px; }
+
+.breadcrumb { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); background: rgba(10, 30, 60, 0.8); padding: 6px 16px; border-radius: 20px; border: 1px solid rgba(30, 144, 255, 0.4); font-size: 13px; z-index: 85; }
+.breadcrumb span { color: #a0c4ff; }
+.breadcrumb b { color: #1e90ff; }
+
+.pulse { animation: pulse 1s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.flash-red { animation: flashRed 0.5s infinite; }
+@keyframes flashRed { 0%, 100% { background-color: rgba(255, 50, 50, 0.3); } 50% { background-color: rgba(255, 50, 50, 0.8); } }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="loginBox">
+    <h2>3D智慧铁路编组站驼峰调度平台</h2>
+    <div class="faceScan"><span class="faceIcon">👤</span></div>
+    <div style="color:#a0c4ff; font-size:13px; margin-bottom:15px;">人脸识别扫描中...</div>
+    <div class="roleSelect">
+      <label><input type="radio" name="role" value="shunter" checked> 调车长</label>
+      <label><input type="radio" name="role" value="stationmaster"> 值班站长</label>
+      <label><input type="radio" name="role" value="bureau"> 铁路局</label>
+    </div>
+    <button class="loginBtn" onclick="doLogin()">登 录</button>
+  </div>
+</div>
+
+<div id="container" style="display:none;">
+  <canvas id="canvas3d"></canvas>
+
+  <div class="topBar">
+    <h1>🚂 3D智慧铁路编组站驼峰调度与安全管控可视化平台</h1>
+    <div class="info">
+      <span>系统时间<b id="sysTime">--:--:--</b></span>
+      <span>当前班次<b id="curShift">白班</b></span>
+      <span>天气<b>晴 26°C</b></span>
+    </div>
+    <div class="userInfo">
+      <span id="userName">张工</span>
+      <span class="roleTag" id="userRole">调车长</span>
+      <button onclick="doLogout()">退出</button>
+    </div>
+  </div>
+
+  <div class="breadcrumb">
+    <span>编组站全景</span> / <b id="curView">全局视图</b>
+  </div>
+
+  <div class="sidePanel">
+    <div class="panelTitle">📊 作业统计</div>
+    <div class="statCard"><div class="label">今日解体列数</div><div class="value" id="statBreak">0<span class="unit">列</span></div></div>
+    <div class="statCard"><div class="label">今日编组列数</div><div class="value" id="statForm">0<span class="unit">列</span></div></div>
+    <div class="statCard"><div class="label">连挂达标率</div><div class="value" id="statRate">0<span class="unit">%</span></div></div>
+    <div class="statCard"><div class="label">异常事件</div><div class="value" id="statAbn" style="color:#ff6464;">0<span class="unit">次</span></div></div>
+
+    <div class="panelTitle" style="margin-top:20px;">🚃 驼峰推送状态</div>
+    <div style="font-size:13px;">推送速度: <b id="pushSpeed" style="color:#1e90ff;">0</b> km/h</div>
+    <div class="speedGauge"><div class="speedFill" id="speedFill" style="width:0%"></div><div class="speedLabel" id="speedLabel">0 km/h</div></div>
+    <div style="font-size:12px; color:#a0c4ff; margin-top:8px;">建议速度: <b id="recSpeed">5.2</b> km/h（载重68t，风阻0.3级）</div>
+
+    <div class="panelTitle" style="margin-top:20px;">🎮 控制操作</div>
+    <button class="btn" onclick="startPush()">开始推送</button>
+    <button class="btn warn" onclick="stopPush()">暂停推送</button>
+    <button class="btn danger" onclick="emergencyBrake()">紧急制动</button>
+    <button class="btn success" onclick="exportExcel()">📥 导出统计Excel</button>
+  </div>
+
+  <div class="rightPanel">
+    <div class="panelTitle">🚨 实时告警</div>
+    <div id="alarmList">
+      <div class="alarmItem info"><div class="time">08:15:32</div><div class="msg">系统启动完成，所有模块正常</div></div>
+    </div>
+
+    <div class="panelTitle" style="margin-top:20px;">🚂 调车机车</div>
+    <div id="locomotiveList"></div>
+
+    <div class="panelTitle" style="margin-top:20px;">👷 列检人员</div>
+    <div id="inspectorList"></div>
+  </div>
+
+  <div class="bottomPanel">
+    <div class="legend"><div class="color" style="background:#50c878;"></div>正常</div>
+    <div class="legend"><div class="color" style="background:#ffb432;"></div>预警</div>
+    <div class="legend"><div class="color" style="background:#ff5050;"></div>故障/超速</div>
+    <div class="legend"><div class="color" style="background:#1e90ff;"></div>推送中</div>
+    <div class="legend"><div class="color" style="background:#a855f7;"></div>去向箭头</div>
+    <div style="width:1px; height:24px; background:#1e90ff; margin:0 8px;"></div>
+    <button class="btn" onclick="setView('global')">全局视图</button>
+    <button class="btn" onclick="setView('arrival')">到达场</button>
+    <button class="btn" onclick="setView('hump')">驼峰</button>
+    <button class="btn" onclick="setView('marshalling')">调车场</button>
+    <button class="btn" onclick="setView('departure')">出发场</button>
+  </div>
+
+  <div id="tooltip" class="tooltip"></div>
+
+  <div class="modal" id="detailModal">
+    <div class="modalBox">
+      <div class="modalHeader"><h3 id="modalTitle">车辆详情</h3><button class="close" onclick="closeModal()">✕</button></div>
+      <div class="modalBody" id="modalBody"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
