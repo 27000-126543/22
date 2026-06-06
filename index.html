@@ -172,6 +172,11 @@ table tr:hover td { background: rgba(30, 144, 255, 0.05); }
 
     <div class="panelTitle" style="margin-top:20px;">👷 列检人员</div>
     <div id="inspectorList"></div>
+
+    <div class="panelTitle" style="margin-top:20px;">📋 解体计划（自动生成）</div>
+    <div id="planList">
+      <div style="font-size:12px;color:#a0c4ff;text-align:center;padding:15px;">等待车流预报...</div>
+    </div>
   </div>
 
   <div class="bottomPanel">
@@ -190,10 +195,40 @@ table tr:hover td { background: rgba(30, 144, 255, 0.05); }
 
   <div id="tooltip" class="tooltip"></div>
 
+  <div id="alarmOverlay" style="display:none;position:fixed;inset:0;pointer-events:none;z-index:5000;">
+    <div id="alarmFlash" style="position:absolute;inset:0;background:rgba(255,0,0,0.15);"></div>
+    <div id="alarmBell" style="position:absolute;top:80px;right:360px;font-size:60px;animation:alarmRing 0.3s infinite;">🔔</div>
+    <div id="alarmText" style="position:absolute;top:100px;left:50%;transform:translateX(-50%);background:rgba(255,0,0,0.9);color:#fff;padding:15px 40px;border-radius:8px;font-size:20px;font-weight:bold;box-shadow:0 0 30px rgba(255,0,0,0.8);">⚠️ 危险警报！</div>
+  </div>
+  <style>
+    @keyframes alarmRing { 0%,100%{transform:rotate(-15deg);} 50%{transform:rotate(15deg);} }
+    @keyframes alarmFlash { 0%,100%{opacity:0;} 50%{opacity:1;} }
+    .speed3DRuler { position:absolute; pointer-events:none; z-index:50; }
+    .planRow { display:flex; align-items:center; padding:8px 10px; background:rgba(30,144,255,0.08); border-radius:4px; margin-bottom:6px; font-size:12px; }
+    .planRow .trackNo { width:40px; font-weight:bold; color:#1e90ff; }
+    .planRow .dest { flex:1; }
+    .planRow .count { color:#a0c4ff; }
+    .orderBtn { background:rgba(255,180,50,0.2); border:1px solid #ffb432; color:#ffb432; padding:2px 8px; border-radius:3px; font-size:11px; cursor:pointer; margin-left:6px; }
+    .orderBtn:hover { background:rgba(255,180,50,0.4); }
+    .woCard { background:rgba(255,80,80,0.08); border:1px solid rgba(255,80,80,0.4); padding:12px; border-radius:6px; margin-top:12px; }
+    .woCard .woTitle { color:#ff5050; font-weight:bold; margin-bottom:8px; }
+    .woCard .woRow { font-size:12px; color:#a0c4ff; margin:4px 0; display:flex; justify-content:space-between; }
+    .woCard .woRow b { color:#fff; }
+    .recordRow { cursor:pointer; transition:all 0.2s; }
+    .recordRow:hover td { background:rgba(30,144,255,0.15) !important; }
+  </style>
+
   <div class="modal" id="detailModal">
     <div class="modalBox">
       <div class="modalHeader"><h3 id="modalTitle">车辆详情</h3><button class="close" onclick="closeModal()">✕</button></div>
       <div class="modalBody" id="modalBody"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="recordModal">
+    <div class="modalBox" style="min-width:450px;">
+      <div class="modalHeader"><h3 id="recordModalTitle">检修记录详情</h3><button class="close" onclick="closeRecordModal()">✕</button></div>
+      <div class="modalBody" id="recordModalBody"></div>
     </div>
   </div>
 </div>
